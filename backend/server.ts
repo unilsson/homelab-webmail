@@ -1,0 +1,10 @@
+import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const app=express();
+app.disable('x-powered-by');
+app.get('/api/health',(_req,res)=>res.json({status:'ok',service:'homelab-webmail'}));
+const staticDir=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../client');
+app.use(express.static(staticDir,{index:false}));
+app.get('*',(req,res)=>{if(req.path.startsWith('/api/')){res.status(404).json({error:'Not found'});return;}res.sendFile(path.join(staticDir,'index.html'));});
+app.listen(Number(process.env.PORT||3000),'0.0.0.0');
