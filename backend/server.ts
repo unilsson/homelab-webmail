@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { beginOAuth, finishOAuth, gmailStatus, gmailProfile } from './google.js';
-import { inbox, readMessage } from './mail.js';
+import { inbox, readMessage, attachment } from './mail.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -110,7 +110,7 @@ app.get('/api/gmail/profile', requireAuth, async (_req, res) => {
   try { res.json(await gmailProfile()); } catch { res.status(503).json({ error: 'Gmail connection unavailable' }); }
 });
 
-app.use(['/api/mail', '/api/mail/:id'], (_req, res, next) => {
+app.use(['/api/mail', '/api/mail/:id', '/api/mail/:id/attachments/:attachmentId'], (_req, res, next) => {
   res.setHeader('Cache-Control', 'no-store');
   next();
 });
@@ -126,6 +126,16 @@ app.get('/api/mail/:id', requireAuth, async (req, res) => {
   if (!/^[a-f0-9]{8,32}$/i.test(req.params.id)) { res.status(400).json({ error: 'Invalid message id' }); return; }
   try { res.json(await readMessage(req.params.id)); }
   catch { res.status(503).json({ error: 'Could not read message' }); }
+});
+app.get('/api/mail/:id/attachments/:attachmentId', requireAuth, async (req, res) => {
+  try {
+    const file = await attachment(req.params.id, req.params.attachmentId);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', "attachment; filename*=UTF-8''" + encodeURIComponent(file.filename.replace(/[\\r\\n]/g, '')));
+    res.send(file.data);
+  } catch { res.status(404).json({ error: 'Attachment unavailable or too large' }); }
 });
 const staticDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
 app.use(express.static(staticDir, { index: false }));
