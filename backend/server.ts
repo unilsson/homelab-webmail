@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { beginOAuth, finishOAuth, gmailStatus, gmailProfile } from './google.js';
+import { inbox, readMessage } from './mail.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -109,7 +110,23 @@ app.get('/api/gmail/profile', requireAuth, async (_req, res) => {
   try { res.json(await gmailProfile()); } catch { res.status(503).json({ error: 'Gmail connection unavailable' }); }
 });
 
-app.get('/api/mail', requireAuth, (_req, res) => res.json({ status: 'not_configured', messages: [] }));
+app.use(['/api/mail', '/api/mail/:id'], (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store');
+  next();
+});
+app.get('/api/mail', requireAuth, async (req, res) => {
+  const pageToken = req.query.pageToken;
+  if (pageToken !== undefined && (typeof pageToken !== 'string' || pageToken.length > 1024)) {
+    res.status(400).json({ error: 'Invalid page token' }); return;
+  }
+  try { res.json(await inbox(pageToken)); }
+  catch { res.status(503).json({ error: 'Could not load inbox' }); }
+});
+app.get('/api/mail/:id', requireAuth, async (req, res) => {
+  if (!/^[a-f0-9]{8,32}$/i.test(req.params.id)) { res.status(400).json({ error: 'Invalid message id' }); return; }
+  try { res.json(await readMessage(req.params.id)); }
+  catch { res.status(503).json({ error: 'Could not read message' }); }
+});
 const staticDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
 app.use(express.static(staticDir, { index: false }));
 app.get('*', (req, res) => {
