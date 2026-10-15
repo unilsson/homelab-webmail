@@ -92,3 +92,39 @@ curl -i http://<THINKPAD_IP>:8087/api/mail
 `/api/auth/me` returns `{"authenticated":false}` before login; `/api/mail` returns HTTP 401. With a valid session `/api/mail` currently returns a placeholder; no Gmail access is implemented yet.
 
 Known sprint-2 limitations: sessions and rate-limit counters are in-memory (single replica only); local login is single-user; no OAuth yet; no external audit log.
+
+## Sprint 3 — Google Gmail API OAuth2 (read-only)
+
+**Prerequisites:** working `https://mail.ulnihnw.net`, `PUBLIC_ORIGIN=https://mail.ulnihnw.net`, `COOKIE_SECURE=true`, and LAN-only reverse proxy. Do not use this flow over HTTP.
+
+In Google Cloud, enable Gmail API and create an OAuth **Web application** client. Register exactly this redirect URI:
+
+```text
+https://mail.ulnihnw.net/api/auth/google/callback
+```
+
+Enable `https://www.googleapis.com/auth/gmail.readonly` in OAuth Data Access. Add your account as a test user if the OAuth project is in Testing status. External test-mode refresh tokens can expire after seven days; plan production setup before relying on unattended access.
+
+Add these **to your local `.env` only** (do not commit them):
+
+```dotenv
+PUBLIC_ORIGIN=https://mail.ulnihnw.net
+COOKIE_SECURE=true
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET='your-google-client-secret'
+TOKEN_ENCRYPTION_KEY=64-hex-characters
+```
+
+Generate the last value with `openssl rand -hex 32`. Secure the file with `chmod 600 .env`. Keep your existing AUTH_* values. Secrets can later be supplied from Infisical.
+
+```bash
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=40
+```
+
+Log into the webmail UI locally, select **Anslut Gmail (endast läsning)**, consent at Google, then select **Testa Gmail-anslutning**. The API only requests the user's email address and message count for Sprint 3, **not message bodies**. Actual inbox browsing is planned for Sprint 4.
+
+Security design: Google OAuth uses one-time state, an HttpOnly Secure Lax state cookie for the external redirect, and PKCE. Access and refresh tokens never go to the browser. The refresh token is stored at `/app/data/gmail-token.enc` encrypted via AES-256-GCM, persisted in Docker volume `gmail_tokens`. The encryption key **must** be backed up separately from this volume; losing it means reauthorizing Google. Do not print secrets in logs or save tokens in Git. The backend requires local authentication for all Gmail API routes.
+
+This is a **single-user/single-Gmail-account** MVP. OAuth pending state and local login sessions reside in memory, so an app restart invalidates an in-progress OAuth flow. No email is stored locally. Google may invalidate refresh tokens at any time, requiring a new authorization.

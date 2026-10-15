@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from 'express
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { beginOAuth, finishOAuth, gmailStatus, gmailProfile } from './google.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -79,6 +80,35 @@ app.post('/api/auth/logout', (req, res) => {
   res.clearCookie(cookieName, { httpOnly: true, secure: cookieSecure, sameSite: 'strict', path: '/' });
   res.json({ authenticated: false });
 });
+
+const oauthCookie = 'gmail_oauth_state';
+app.post('/api/auth/google/start', requireAuth, (_req, res) => {
+  try {
+    const { url, state } = beginOAuth();
+    res.cookie(oauthCookie, state, { httpOnly: true, secure: true, sameSite: 'lax', path: '/api/auth/google/callback', maxAge: 300000 });
+    res.json({ url });
+  } catch { res.status(503).json({ error: 'OAuth not configured' }); }
+});
+app.get('/api/auth/google/callback', async (req, res) => {
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const cookieState = cookies(req)[oauthCookie];
+  res.clearCookie(oauthCookie, { httpOnly: true, secure: true, sameSite: 'lax', path: '/api/auth/google/callback' });
+  if (!state || !code || state !== cookieState) { res.status(403).send('Invalid OAuth state'); return; }
+  try {
+    await finishOAuth(state, code);
+    res.redirect('/?gmail=connected');
+  } catch {
+    res.status(400).send('Google connection failed; please retry from webmail.');
+  }
+});
+app.get('/api/gmail/status', requireAuth, async (_req, res) => {
+  try { res.json(await gmailStatus()); } catch { res.status(503).json({ error: 'Token store unavailable' }); }
+});
+app.get('/api/gmail/profile', requireAuth, async (_req, res) => {
+  try { res.json(await gmailProfile()); } catch { res.status(503).json({ error: 'Gmail connection unavailable' }); }
+});
+
 app.get('/api/mail', requireAuth, (_req, res) => res.json({ status: 'not_configured', messages: [] }));
 const staticDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../client');
 app.use(express.static(staticDir, { index: false }));
