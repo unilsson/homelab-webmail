@@ -154,3 +154,23 @@ docker compose logs --tail=40
 Visit https://mail.ulnihnw.net and sign in locally. Confirm inbox rows appear, open a message, return to inbox, try the Older and Newer buttons, and sign out. Test on mobile width if convenient. Your existing `.env` and Google token volume remain in place.
 
 If Gmail API returns a temporary error (e.g. rate limiting) an error is displayed without exposing Gmail tokens or backend secrets.
+
+## Sprint 5 — HTML mail and attachments
+
+Mail messages can be viewed as sanitized HTML or plain text. HTML is sanitized on the server using `sanitize-html` and displayed in an iframe without sandbox permissions. Its Content Security Policy blocks all external resources, including remote images and fonts, and prevents scripts or forms. Formatting support is deliberately conservative: inline styles, external images and some complex newsletter layouts are stripped.
+
+Attachments are listed below the message with download links. Downloads require a valid local session, use `Content-Disposition: attachment`, and are limited to 15 MiB. Unsupported or oversized attachments show an informational label. There is no permanent storage of attachment data. This sprint does not change Gmail messages, labels or read status.
+
+### Test Sprint 5 on ThinkPad
+
+```bash
+git fetch origin
+git switch sprint/05-html-attachments
+npm test
+docker compose up -d --build
+docker compose logs --tail=50
+```
+
+Open https://mail.ulnihnw.net and inspect a regular plain-text message, a formatted HTML message, and an email with a small attachment. Confirm remote images are not loaded, attachments download correctly, and switching between **Formaterat** and **Ren text** works. Existing `.env` and Google OAuth token volume are unchanged.
+
+Do not merge before Docker compilation and functional testing on the ThinkPad.
