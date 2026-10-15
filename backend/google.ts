@@ -65,7 +65,7 @@ async function loadRefreshToken(): Promise<string | null> {
 export async function gmailStatus(): Promise<{ configured: boolean; connected: boolean }> {
   return { configured: oauthConfigured, connected: oauthConfigured && Boolean(await loadRefreshToken()) };
 }
-async function accessToken(): Promise<string> {
+export async function accessToken(): Promise<string> {
   const refresh = await loadRefreshToken();
   if (!refresh) throw new Error('Gmail has not been connected');
   const resp = await fetch('https://oauth2.googleapis.com/token', {
