@@ -49,3 +49,46 @@ From another LAN device open `http://<THINKPAD_LAN_IP>:8087`, or `curl http://<T
 - Gmail OAuth tokens will stay server-side; message contents are never persisted to a local mailbox.
 
 See `.env.example` for nonsecret configuration. Do not commit `.env`, tokens, or other credentials.
+
+## Sprint 2 — Local authentication
+
+The service starts only after a local account and a scrypt password hash are configured. Passwords are **never** stored in Git or passed via shell command arguments. Session tokens are HTTP-only cookies, held server-side in memory, and expire after 30 minutes of inactivity. Restarting the container logs everyone out. Login attempts are rate-limited; state resets at restart.
+
+### Set up on ThinkPad
+
+```bash
+cp -n .env.example .env
+npm run hash-password
+```
+
+If Node.js is not installed on the host, generate the hash without creating a running server:
+
+```bash
+docker run --rm -it -v "$PWD/scripts:/work:ro" -w /work node:22-alpine node hash-password.mjs
+```
+
+Copy the printed `AUTH_PASSWORD_HASH=...` into `.env`; set `AUTH_USERNAME`. Keep `.env` out of Git and protect it with `chmod 600 .env`.
+
+For a **temporary trusted LAN test only**, if you have not yet configured HTTPS, set these values in `.env`:
+
+```dotenv
+HOST_BIND_IP=<CURRENT_THINKPAD_LAN_IP>
+HOST_PORT=8087
+PUBLIC_ORIGIN=http://<CURRENT_THINKPAD_LAN_IP>:8087
+COOKIE_SECURE=false
+```
+
+Then run `docker compose up -d --build`, and open `http://<CURRENT_THINKPAD_LAN_IP>:8087` from your laptop.
+
+**Warning:** On plain HTTP, session cookies and passwords can be intercepted on the network. This mode is strictly for a short, trusted-LAN smoke test; don't connect Gmail or store tokens until HTTPS is configured. In normal use configure Nginx at `https://mail.ulnihnw.net`, set `PUBLIC_ORIGIN=https://mail.ulnihnw.net` and `COOKIE_SECURE=true`. Prefer binding Docker to localhost on the machine where Nginx runs.
+
+### API checks
+
+```bash
+curl -i http://<THINKPAD_IP>:8087/api/auth/me
+curl -i http://<THINKPAD_IP>:8087/api/mail
+```
+
+`/api/auth/me` returns `{"authenticated":false}` before login; `/api/mail` returns HTTP 401. With a valid session `/api/mail` currently returns a placeholder; no Gmail access is implemented yet.
+
+Known sprint-2 limitations: sessions and rate-limit counters are in-memory (single replica only); local login is single-user; no OAuth yet; no external audit log.
