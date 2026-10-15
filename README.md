@@ -14,14 +14,23 @@ Self-hosted webmail for a private LAN, using Gmail API (not IMAP).
 
 This sprint provides a working React + Express shell with a health endpoint. **It does not connect to Gmail, provide login, or display real mail yet. Do not expose it to untrusted networks.**
 
-### Run
+### Run on a headless ThinkPad
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Set `HOST_BIND_IP` to the actual LAN IP of the ThinkPad (e.g. `192.168.1.153` **only if that remains its current address**), and leave `HOST_PORT=8087`. The default `127.0.0.1` is for setups using a reverse proxy on the same host.
 
 ```bash
 docker compose up -d --build
-curl http://127.0.0.1:8087/api/health
+docker compose ps
 ```
 
-Open `http://127.0.0.1:8087` in a browser on the Docker host. Port 8087 is bound to loopback only. Later sprints will add local authentication before any LAN exposure.
+From another LAN device open `http://<THINKPAD_LAN_IP>:8087`, or `curl http://<THINKPAD_LAN_IP>:8087/api/health`.
+
+**Security:** Sprint 1 has no login. Restrict this port to a trusted local network using firewall rules; do not forward it from the internet. Prefer internal HTTPS via a reverse proxy as soon as authentication is implemented. Binding to the specific LAN IP is safer than `0.0.0.0`, but does not by itself control which LAN clients may connect.
 
 ### Roadmap
 
