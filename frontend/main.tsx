@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import './style.css';
 
 type Mail = { id: string; from: string; subject: string; date: string; snippet: string; unread: boolean };
-type Detail = Mail & { to: string; body: string };
+type Attachment = { id:string; filename:string; mimeType:string; size:number };
+type Detail = Mail & { to: string; body: string; html: string; attachments: Attachment[] };
 type Page = { messages: Mail[]; nextPageToken?: string };
 async function json<T>(url: string, options?: RequestInit): Promise<T> {
   const r = await fetch(url, { ...options, cache: 'no-store' });
@@ -21,6 +22,7 @@ function App() {
   const [history, setHistory] = useState<string[]>([]);
   const [currentToken, setCurrentToken] = useState('');
   const [detail, setDetail] = useState<Detail|null>(null);
+  const [view, setView] = useState<'html'|'text'>('html');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -57,7 +59,7 @@ function App() {
   }
   async function openMessage(id: string) {
     setLoading(true);setError('');
-    try { setDetail(await json<Detail>('/api/mail/' + encodeURIComponent(id))); }
+    try { setDetail(await json<Detail>('/api/mail/' + encodeURIComponent(id))); setView('html'); }
     catch(e) {setError((e as Error).message);}
     finally {setLoading(false);}
   }
@@ -79,7 +81,16 @@ function App() {
           <button className="secondary" onClick={()=>setDetail(null)}>← Tillbaka</button>
           <h2>{detail.subject}</h2><p><strong>Från:</strong> {detail.from}</p><p><strong>Till:</strong> {detail.to}</p>
           <p><strong>Datum:</strong> {detail.date ? new Date(detail.date).toLocaleString('sv-SE') : '–'}</p>
-          <pre>{detail.body}</pre>
+          <div className="viewcontrols"><button className="secondary" disabled={!detail.html || view==='html'} onClick={()=>setView('html')}>Formaterat</button>
+            <button className="secondary" disabled={view==='text'} onClick={()=>setView('text')}>Ren text</button></div>
+          {view==='html' && detail.html ? <iframe title="Meddelandets HTML-innehåll" sandbox=""
+            referrerPolicy="no-referrer" className="htmlmail"
+            srcDoc={`<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'none'; media-src 'none'; font-src 'none'; style-src 'unsafe-inline'; form-action 'none'; base-uri 'none'"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:system-ui,sans-serif;color:#202630;background:#fff;padding:16px;overflow-wrap:anywhere}table{max-width:100%}a{color:#174f9d}</style></head><body>${detail.html}</body></html>`} />
+            : <pre>{detail.body}</pre>}
+          {detail.attachments.length>0 && <section className="attachments"><h3>Bilagor</h3>{detail.attachments.map(a=>
+            <div key={a.id} className="attachment"><span>{a.filename} · {(a.size/1024).toFixed(0)} KB</span>
+              {a.size<=15*1024*1024 ? <a href={`/api/mail/${encodeURIComponent(detail.id)}/attachments/${encodeURIComponent(a.id)}`}>Ladda ned</a>
+                : <span>Över 15 MB – kan inte laddas ned</span>}</div>)}</section>}
         </article> : <>
           {loading && <p>Laddar …</p>}
           {!loading && page?.messages.length === 0 && <p>Inkorgen är tom.</p>}
