@@ -128,3 +128,29 @@ Log into the webmail UI locally, select **Anslut Gmail (endast läsning)**, cons
 Security design: Google OAuth uses one-time state, an HttpOnly Secure Lax state cookie for the external redirect, and PKCE. Access and refresh tokens never go to the browser. The refresh token is stored at `/app/data/gmail-token.enc` encrypted via AES-256-GCM, persisted in Docker volume `gmail_tokens`. The encryption key **must** be backed up separately from this volume; losing it means reauthorizing Google. Do not print secrets in logs or save tokens in Git. The backend requires local authentication for all Gmail API routes.
 
 This is a **single-user/single-Gmail-account** MVP. OAuth pending state and local login sessions reside in memory, so an app restart invalidates an in-progress OAuth flow. No email is stored locally. Google may invalidate refresh tokens at any time, requiring a new authorization.
+
+## Sprint 4 — Inbox and message viewer
+
+- Lists up to 50 Gmail messages in the **INBOX** label per page.
+- Fetches sender, subject, date, snippet, and unread status directly from Gmail.
+- Opens messages via Gmail API and renders the `text/plain` MIME part only. If a message contains HTML only, a Gmail snippet is shown rather than unsafe remote HTML.
+- Older/newer paging uses Gmail's `nextPageToken`; **Uppdatera** refreshes the current page.
+- Gmail remains the only permanent mailbox. No e-mail content is saved in the local database or Docker volume.
+- Mail API routes require local login and set `Cache-Control: no-store`. Backend limits batches of metadata calls to five concurrent requests.
+- Read-only OAuth scope continues to prevent changes to Gmail: opening a message does **not** mark it read on Gmail.
+- Attachments, searching, rich HTML rendering and sending are not in this sprint. Text replies can be truncated to 200,000 characters as a safeguard.
+
+### Test on ThinkPad
+
+```bash
+git fetch origin
+git switch sprint/04-inbox
+npm test
+docker compose up -d --build
+docker compose ps
+docker compose logs --tail=40
+```
+
+Visit https://mail.ulnihnw.net and sign in locally. Confirm inbox rows appear, open a message, return to inbox, try the Older and Newer buttons, and sign out. Test on mobile width if convenient. Your existing `.env` and Google token volume remain in place.
+
+If Gmail API returns a temporary error (e.g. rate limiting) an error is displayed without exposing Gmail tokens or backend secrets.
